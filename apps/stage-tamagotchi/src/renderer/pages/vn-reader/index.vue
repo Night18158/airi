@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import type { Eventa } from '@moeru/eventa'
+
 import { defineInvoke } from '@moeru/eventa'
 import { useElectronEventaContext } from '@proj-airi/electron-vueuse'
 import { storeToRefs } from 'pinia'
@@ -27,19 +29,20 @@ const context = useElectronEventaContext()
 onMounted(async () => {
   // Listen for incoming text from Textractor
   try {
-    context.value.on(vnReaderTextReceived, (evt) => {
-      const text = (evt as { body?: { text: string } })?.body?.text
+    context.value.on(vnReaderTextReceived, (evt: Eventa<{ text: string }>) => {
+      const text = evt?.body?.text
       if (text)
         void store.handleIncomingText(text)
     })
 
-    context.value.on(vnReaderConnectionChanged, (evt) => {
-      const body = (evt as { body?: { connected: boolean, clientCount: number } })?.body
-      if (body)
-        store.updateConnection(body.connected, body.clientCount)
+    context.value.on(vnReaderConnectionChanged, (evt: Eventa<{ connected: boolean, clientCount: number }>) => {
+      if (evt?.body)
+        store.updateConnection(evt.body.connected, evt.body.clientCount)
     })
   }
-  catch {}
+  catch (err) {
+    console.warn('[VN Reader] Failed to register event listeners:', err)
+  }
 
   // Query initial server status
   try {
@@ -48,7 +51,9 @@ onMounted(async () => {
     if (status)
       store.updateServerStatus(status.running, status.clientCount)
   }
-  catch {}
+  catch (err) {
+    console.warn('[VN Reader] Failed to fetch initial server status:', err)
+  }
 })
 </script>
 

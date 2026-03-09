@@ -15,6 +15,12 @@ export interface VnReaderService {
   onConnectionChanged: (handler: (connected: boolean, clientCount: number) => void) => () => void
 }
 
+/**
+ * Sets up the VN Reader WebSocket server service.
+ * Creates a WebSocket server on port 9001 (Textractor's default) that accepts connections
+ * from Textractor's WebSocket plugin and forwards extracted Japanese text to the renderer
+ * via registered handlers. Handles deduplication of consecutive identical messages.
+ */
 export async function setupVnReaderService(): Promise<VnReaderService> {
   const log = useLogg('main/vn-reader').useGlobalConfig()
 

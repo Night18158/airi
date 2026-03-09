@@ -41,6 +41,11 @@ export const useVnReaderStore = defineStore('vn-reader', () => {
   const { activeProvider, activeModel } = storeToRefs(consciousnessStore)
   const speechRuntimeStore = useSpeechRuntimeStore()
 
+  /**
+   * Builds the translation prompt injected into the LLM for each VN line.
+   * Instructs the model to translate from Japanese to the selected target language,
+   * preserving tone, transliterating names, and occasionally adding AIRI's personality reaction.
+   */
   function buildTranslationPrompt(text: string): string {
     const langLabel = targetLanguage.value === 'es' ? 'Spanish (Spain, es-ES)' : 'English'
     return `You are translating a Japanese visual novel for a reader.
@@ -61,6 +66,11 @@ Japanese text to translate:
 ${text}`
   }
 
+  /**
+   * Translates a Japanese VN text string using the active consciousness LLM provider.
+   * The LLM responds in a strict JSON format with "translation" and optional "reaction" keys.
+   * Falls back to returning the original text if the provider is not configured or the call fails.
+   */
   async function translate(text: string): Promise<{ translation: string, reaction?: string }> {
     const provider = activeProvider.value
     const model = activeModel.value
@@ -80,7 +90,8 @@ ${text}`
         ),
       })
 
-      // Parse JSON response, stripping any markdown code fences
+      // NOTICE: Some LLMs wrap JSON output in markdown code fences (```json ... ```).
+      // Strip those so JSON.parse works reliably regardless of the model's verbosity.
       const cleaned = (responseText ?? '').trim().replace(/^```json\s*/, '').replace(/```\s*$/, '')
       const parsed = JSON.parse(cleaned) as { translation?: string, reaction?: string }
       return {
@@ -88,12 +99,17 @@ ${text}`
         reaction: parsed.reaction,
       }
     }
-    catch {
+    catch (err) {
+      console.warn('[VN Reader] Translation failed, returning original text:', err)
       // Fallback: return original text if translation fails
       return { translation: text }
     }
   }
 
+  /**
+   * Sends translated text through the shared speech runtime pipeline for TTS playback.
+   * Uses 'queue' behavior so VN lines are read in order even if they arrive quickly.
+   */
   async function speakText(text: string) {
     isSpeaking.value = true
     try {
