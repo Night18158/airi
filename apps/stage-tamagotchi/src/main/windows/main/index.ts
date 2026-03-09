@@ -5,6 +5,7 @@ import type { I18n } from '../../libs/i18n'
 import type { ServerChannel } from '../../services/airi/channel-server'
 import type { McpStdioManager } from '../../services/airi/mcp-servers'
 import type { AutoUpdater } from '../../services/electron/auto-updater'
+import type { VnReaderService } from '../../services/vn-reader'
 import type { NoticeWindowManager } from '../notice'
 import type { WidgetsWindowManager } from '../widgets'
 
@@ -53,6 +54,7 @@ export async function setupMainWindow(params: {
   onWindowCreated?: (window: BrowserWindow) => void
   serverChannel: ServerChannel
   mcpStdioManager: McpStdioManager
+  vnReaderService: VnReaderService
   i18n: I18n
 }) {
   const {
@@ -166,6 +168,7 @@ export async function setupMainWindow(params: {
     autoUpdater: params.autoUpdater,
     serverChannel: params.serverChannel,
     mcpStdioManager: params.mcpStdioManager,
+    vnReaderService: params.vnReaderService,
     i18n: params.i18n,
   })
 

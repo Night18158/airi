@@ -23,6 +23,7 @@ import { setupServerChannel } from './services/airi/channel-server'
 import { setupMcpStdioManager } from './services/airi/mcp-servers'
 import { setupPluginHost } from './services/airi/plugins'
 import { setupAutoUpdater } from './services/electron/auto-updater'
+import { setupVnReaderService } from './services/vn-reader'
 import { setupTray } from './tray'
 import { setupAboutWindowReusable } from './windows/about'
 import { setupBeatSync } from './windows/beat-sync'
@@ -98,6 +99,10 @@ app.whenReady().then(async () => {
     build: async () => setupMcpStdioManager(),
   })
 
+  const vnReaderService = injeca.provide('modules:vn-reader', {
+    build: async () => setupVnReaderService(),
+  })
+
   const pluginHost = injeca.provide('modules:plugin-host', {
     dependsOn: { serverChannel },
     build: () => setupPluginHost(),
@@ -133,7 +138,7 @@ app.whenReady().then(async () => {
   })
 
   const mainWindow = injeca.provide('windows:main', {
-    dependsOn: { settingsWindow, chatWindow, widgetsManager, noticeWindow, beatSync, autoUpdater, serverChannel, mcpStdioManager, i18n },
+    dependsOn: { settingsWindow, chatWindow, widgetsManager, noticeWindow, beatSync, autoUpdater, serverChannel, mcpStdioManager, vnReaderService, i18n },
     build: async ({ dependsOn }) => setupMainWindow(dependsOn),
   })
 
@@ -148,7 +153,7 @@ app.whenReady().then(async () => {
   })
 
   injeca.invoke({
-    dependsOn: { mainWindow, tray, serverChannel, pluginHost, mcpStdioManager },
+    dependsOn: { mainWindow, tray, serverChannel, pluginHost, mcpStdioManager, vnReaderService },
     callback: noop,
   })
 
