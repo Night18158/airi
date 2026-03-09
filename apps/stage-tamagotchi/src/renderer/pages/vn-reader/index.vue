@@ -1,0 +1,211 @@
+<script setup lang="ts">
+import { defineInvoke } from '@moeru/eventa'
+import { useElectronEventaContext } from '@proj-airi/electron-vueuse'
+import { storeToRefs } from 'pinia'
+import { onMounted } from 'vue'
+
+import WindowTitleBar from '../../components/Window/TitleBar.vue'
+
+import { vnReaderConnectionChanged, vnReaderGetStatus, vnReaderTextReceived } from '../../../shared/eventa'
+import { useVnReaderStore } from '../../stores/vn-reader'
+
+const store = useVnReaderStore()
+const {
+  connected,
+  clientCount,
+  enabled,
+  targetLanguage,
+  currentJapaneseText,
+  currentTranslation,
+  currentReaction,
+  isTranslating,
+  history,
+} = storeToRefs(store)
+
+const context = useElectronEventaContext()
+
+onMounted(async () => {
+  // Listen for incoming text from Textractor
+  try {
+    context.value.on(vnReaderTextReceived, (evt) => {
+      const text = (evt as { body?: { text: string } })?.body?.text
+      if (text)
+        void store.handleIncomingText(text)
+    })
+
+    context.value.on(vnReaderConnectionChanged, (evt) => {
+      const body = (evt as { body?: { connected: boolean, clientCount: number } })?.body
+      if (body)
+        store.updateConnection(body.connected, body.clientCount)
+    })
+  }
+  catch {}
+
+  // Query initial server status
+  try {
+    const getStatus = defineInvoke(context.value, vnReaderGetStatus)
+    const status = await getStatus()
+    if (status)
+      store.updateServerStatus(status.running, status.clientCount)
+  }
+  catch {}
+})
+</script>
+
+<template>
+  <div :class="['h-full w-full overflow-y-auto', 'pt-[44px]']">
+    <WindowTitleBar
+      title="VN Reader"
+      icon="i-solar:book-2-bold"
+    />
+
+    <div class="flex flex-col gap-3 p-4">
+      <!-- Connection status -->
+      <div :class="['flex items-center gap-2 rounded-lg px-3 py-2 text-sm', connected ? 'bg-green-500/15 text-green-400' : 'bg-neutral-500/10 text-neutral-400']">
+        <span :class="['h-2 w-2 rounded-full', connected ? 'bg-green-400' : 'bg-neutral-500']" />
+        <span v-if="connected">
+          Textractor conectado ({{ clientCount }} {{ clientCount === 1 ? 'cliente' : 'clientes' }})
+        </span>
+        <span v-else>
+          Esperando Textractor en ws://localhost:9001...
+        </span>
+      </div>
+
+      <!-- Enable toggle + Language selector -->
+      <div class="flex items-center justify-between gap-3">
+        <label class="flex cursor-pointer select-none items-center gap-2">
+          <input
+            v-model="enabled"
+            type="checkbox"
+            :class="['h-4 w-4 rounded accent-primary-500']"
+          >
+          <span class="text-sm text-neutral-300">VN Reader activo</span>
+        </label>
+
+        <div class="flex gap-1">
+          <button
+            :class="[
+              'rounded-md px-3 py-1 text-xs font-medium transition-colors',
+              targetLanguage === 'es'
+                ? 'bg-primary-500/30 text-primary-300'
+                : 'bg-neutral-700/50 text-neutral-400 hover:bg-neutral-700',
+            ]"
+            @click="targetLanguage = 'es'"
+          >
+            ES
+          </button>
+          <button
+            :class="[
+              'rounded-md px-3 py-1 text-xs font-medium transition-colors',
+              targetLanguage === 'en'
+                ? 'bg-primary-500/30 text-primary-300'
+                : 'bg-neutral-700/50 text-neutral-400 hover:bg-neutral-700',
+            ]"
+            @click="targetLanguage = 'en'"
+          >
+            EN
+          </button>
+        </div>
+      </div>
+
+      <!-- Current line panel -->
+      <div
+        v-if="currentJapaneseText"
+        class="flex flex-col gap-3 rounded-xl bg-neutral-800/50 p-4"
+      >
+        <!-- Japanese text -->
+        <div>
+          <p class="mb-1 text-xs text-neutral-500 font-medium tracking-wide uppercase">
+            日本語
+          </p>
+          <p class="text-lg text-neutral-200 leading-relaxed">
+            {{ currentJapaneseText }}
+          </p>
+        </div>
+
+        <!-- Translation -->
+        <div>
+          <p class="mb-1 text-xs text-neutral-500 font-medium tracking-wide uppercase">
+            {{ targetLanguage === 'es' ? 'Traducción' : 'Translation' }}
+          </p>
+          <div v-if="isTranslating" class="flex items-center gap-2 text-neutral-400">
+            <span class="i-solar:refresh-bold h-4 w-4 animate-spin" />
+            <span class="text-sm">Traduciendo...</span>
+          </div>
+          <p v-else class="text-base text-neutral-100 leading-relaxed">
+            {{ currentTranslation }}
+          </p>
+        </div>
+
+        <!-- AIRI reaction bubble -->
+        <div
+          v-if="currentReaction"
+          :class="[
+            'flex items-start gap-2 rounded-lg bg-primary-500/10 px-3 py-2',
+            'border border-primary-500/20',
+          ]"
+        >
+          <span class="i-solar:chat-round-bold mt-0.5 h-4 w-4 flex-shrink-0 text-primary-400" />
+          <p class="text-sm text-primary-300 leading-relaxed">
+            {{ currentReaction }}
+          </p>
+        </div>
+      </div>
+
+      <!-- Empty state -->
+      <div
+        v-else
+        class="flex flex-col items-center justify-center gap-2 rounded-xl bg-neutral-800/30 py-8 text-center"
+      >
+        <span class="i-solar:book-2-bold h-8 w-8 text-neutral-600" />
+        <p class="text-sm text-neutral-500">
+          Esperando texto del juego...
+        </p>
+      </div>
+
+      <!-- Translation history -->
+      <div v-if="history.length > 0">
+        <div class="mb-2 flex items-center justify-between">
+          <p class="text-xs text-neutral-500 font-medium tracking-wide uppercase">
+            Historial
+          </p>
+          <button
+            class="text-xs text-neutral-600 transition-colors hover:text-neutral-400"
+            @click="store.clearHistory()"
+          >
+            Limpiar
+          </button>
+        </div>
+
+        <div class="flex flex-col gap-2">
+          <div
+            v-for="entry in history.slice(0, 10)"
+            :key="entry.timestamp"
+            class="rounded-lg bg-neutral-800/30 px-3 py-2"
+          >
+            <p class="text-xs text-neutral-500 leading-relaxed">
+              {{ entry.japanese }}
+            </p>
+            <p class="text-sm text-neutral-300 leading-relaxed">
+              {{ entry.translation }}
+            </p>
+            <p v-if="entry.reaction" class="mt-1 text-xs text-primary-400/70 leading-relaxed">
+              ↩ {{ entry.reaction }}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Footer note -->
+      <p class="text-center text-xs text-neutral-600 leading-relaxed">
+        Configura el plugin WebSocket de Textractor para conectar a
+        <code class="rounded bg-neutral-800 px-1 py-0.5">ws://localhost:9001</code>
+      </p>
+    </div>
+  </div>
+</template>
+
+<route lang="yaml">
+meta:
+  layout: stage
+</route>
