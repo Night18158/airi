@@ -12,7 +12,7 @@ import { defineInvokeHandler } from '@moeru/eventa'
 import { createContext } from '@moeru/eventa/adapters/electron/main'
 import { ipcMain } from 'electron'
 
-import { electronOpenChat, electronOpenMainDevtools, electronOpenSettings, noticeWindowEventa, vnReaderConnectionChanged, vnReaderGetStatus, vnReaderTextReceived } from '../../../../shared/eventa'
+import { electronOpenChat, electronOpenMainDevtools, electronOpenSettings, electronOpenVnReader, noticeWindowEventa, vnReaderConnectionChanged, vnReaderGetStatus, vnReaderTextReceived } from '../../../../shared/eventa'
 import { createMcpServersService } from '../../../services/airi/mcp-servers'
 import { createWidgetsService } from '../../../services/airi/widgets'
 import { createAutoUpdaterService } from '../../../services/electron'
@@ -23,6 +23,7 @@ export async function setupMainWindowElectronInvokes(params: {
   window: BrowserWindow
   settingsWindow: () => Promise<BrowserWindow>
   chatWindow: () => Promise<BrowserWindow>
+  vnReaderWindow: () => Promise<BrowserWindow>
   widgetsManager: WidgetsWindowManager
   noticeWindow: NoticeWindowManager
   autoUpdater: AutoUpdater
@@ -46,6 +47,7 @@ export async function setupMainWindowElectronInvokes(params: {
   defineInvokeHandler(context, electronOpenMainDevtools, () => params.window.webContents.openDevTools({ mode: 'detach' }))
   defineInvokeHandler(context, electronOpenSettings, async () => toggleWindowShow(await params.settingsWindow()))
   defineInvokeHandler(context, electronOpenChat, async () => toggleWindowShow(await params.chatWindow()))
+  defineInvokeHandler(context, electronOpenVnReader, async () => toggleWindowShow(await params.vnReaderWindow()))
   defineInvokeHandler(context, noticeWindowEventa.openWindow, payload => params.noticeWindow.open(payload))
 
   // VN Reader IPC — let renderer query status and receive pushed events

@@ -33,6 +33,7 @@ import { setupDevtoolsWindow } from './windows/devtools'
 import { setupMainWindow } from './windows/main'
 import { setupNoticeWindowManager } from './windows/notice'
 import { setupSettingsWindowReusableFunc } from './windows/settings'
+import { setupVnReaderWindowReusableFunc } from './windows/vn-reader'
 import { setupWidgetsWindowManager } from './windows/widgets'
 
 // TODO: once we refactored eventa to support window-namespaced contexts,
@@ -132,13 +133,18 @@ app.whenReady().then(async () => {
     build: ({ dependsOn }) => setupChatWindowReusableFunc(dependsOn),
   })
 
+  const vnReaderWindow = injeca.provide('windows:vn-reader', {
+    dependsOn: { vnReaderService, serverChannel, i18n },
+    build: ({ dependsOn }) => setupVnReaderWindowReusableFunc(dependsOn),
+  })
+
   const settingsWindow = injeca.provide('windows:settings', {
     dependsOn: { widgetsManager, beatSync, autoUpdater, devtoolsMarkdownStressWindow, serverChannel, mcpStdioManager, i18n },
     build: async ({ dependsOn }) => setupSettingsWindowReusableFunc(dependsOn),
   })
 
   const mainWindow = injeca.provide('windows:main', {
-    dependsOn: { settingsWindow, chatWindow, widgetsManager, noticeWindow, beatSync, autoUpdater, serverChannel, mcpStdioManager, vnReaderService, i18n },
+    dependsOn: { settingsWindow, chatWindow, vnReaderWindow, widgetsManager, noticeWindow, beatSync, autoUpdater, serverChannel, mcpStdioManager, vnReaderService, i18n },
     build: async ({ dependsOn }) => setupMainWindow(dependsOn),
   })
 

@@ -18,6 +18,7 @@ import {
   electron,
   electronOpenChat,
   electronOpenSettings,
+  electronOpenVnReader,
   electronStartDraggingWindow,
   electronWindowClose,
 } from '../../../../shared/eventa'
@@ -32,6 +33,7 @@ const { enabled } = storeToRefs(settingsAudioDeviceStore)
 const { controlsIslandIconSize } = storeToRefs(settingsStore)
 const openSettings = useElectronEventaInvoke(electronOpenSettings)
 const openChat = useElectronEventaInvoke(electronOpenChat)
+const openVnReader = useElectronEventaInvoke(electronOpenVnReader)
 const isLinux = useElectronEventaInvoke(electron.app.isLinux)
 const closeWindow = useElectronEventaInvoke(electronWindowClose)
 
@@ -123,6 +125,15 @@ function refreshWindow() {
               </ControlButton>
               <template #tooltip>
                 {{ t('tamagotchi.stage.controls-island.open-chat') }}
+              </template>
+            </ControlButtonTooltip>
+
+            <ControlButtonTooltip>
+              <ControlButton :button-style="adjustStyleClasses.button" @click="openVnReader">
+                <div i-solar:book-2-bold :class="adjustStyleClasses.icon" text="neutral-800 dark:neutral-300" />
+              </ControlButton>
+              <template #tooltip>
+                VN Reader
               </template>
             </ControlButtonTooltip>
 
