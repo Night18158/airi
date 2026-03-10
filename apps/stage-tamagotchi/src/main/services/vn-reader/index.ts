@@ -35,6 +35,32 @@ export async function setupVnReaderService(initialPort: number = VN_READER_DEFAU
   const textHandlers = new Set<(text: string) => void>()
   const connectionHandlers = new Set<(connected: boolean, clientCount: number) => void>()
 
+  /**
+   * Returns true if the message is an AIRI-internal protocol message that should be ignored.
+   * Textractor can sometimes echo back messages it receives, including AIRI's own heartbeats.
+   */
+  function isAiriInternalMessage(text: string): boolean {
+    if (!text.startsWith('{'))
+      return false
+    try {
+      const parsed = JSON.parse(text) as Record<string, unknown>
+      // Handle superjson-wrapped format: { json: { type: "..." } }
+      const messageBody = (parsed.json as Record<string, unknown> | undefined) ?? parsed
+      const type = messageBody?.type
+      if (typeof type === 'string' && (type.startsWith('transport:') || type.startsWith('module:')))
+        return true
+      // Also check nested kind field for ping/pong (e.g. data.kind)
+      const data = messageBody?.data as Record<string, unknown> | undefined
+      const kind = data?.kind
+      if (kind === 'ping' || kind === 'pong')
+        return true
+    }
+    catch {
+      // Not valid JSON — not an internal message
+    }
+    return false
+  }
+
   function notifyConnectionChanged() {
     const connected = clientCount > 0
     for (const handler of connectionHandlers) {
@@ -66,6 +92,13 @@ export async function setupVnReaderService(initialPort: number = VN_READER_DEFAU
           const text = data.toString('utf-8').trim()
           if (!text)
             return
+
+          // Filter out AIRI internal protocol messages (heartbeats, module announcements, etc.)
+          // These can appear when the same WebSocket port is shared between Textractor and AIRI internals.
+          if (isAiriInternalMessage(text)) {
+            log.log('Ignoring AIRI internal protocol message')
+            return
+          }
 
           // Deduplicate identical consecutive messages (Textractor can send duplicates)
           if (text === lastText)
