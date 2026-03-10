@@ -48,6 +48,7 @@ type AppConfig = InferOutput<typeof appConfigSchema>
 export async function setupMainWindow(params: {
   settingsWindow: () => Promise<BrowserWindow>
   chatWindow: () => Promise<BrowserWindow>
+  vnReaderWindow: () => Promise<BrowserWindow>
   widgetsManager: WidgetsWindowManager
   noticeWindow: NoticeWindowManager
   autoUpdater: AutoUpdater
@@ -163,6 +164,7 @@ export async function setupMainWindow(params: {
     window,
     settingsWindow: params.settingsWindow,
     chatWindow: params.chatWindow,
+    vnReaderWindow: params.vnReaderWindow,
     widgetsManager: params.widgetsManager,
     noticeWindow: params.noticeWindow,
     autoUpdater: params.autoUpdater,

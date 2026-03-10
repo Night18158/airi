@@ -8,6 +8,7 @@ export const electronStartDraggingWindow = defineInvokeEventa('eventa:invoke:ele
 export const electronOpenMainDevtools = defineInvokeEventa('eventa:invoke:electron:windows:main:devtools:open')
 export const electronOpenSettings = defineInvokeEventa('eventa:invoke:electron:windows:settings:open')
 export const electronOpenChat = defineInvokeEventa('eventa:invoke:electron:windows:chat:open')
+export const electronOpenVnReader = defineInvokeEventa('eventa:invoke:electron:windows:vn-reader:open')
 export const electronOpenSettingsDevtools = defineInvokeEventa('eventa:invoke:electron:windows:settings:devtools:open')
 export const electronOpenDevtoolsWindow = defineInvokeEventa<void, { route?: string }>('eventa:invoke:electron:windows:devtools:open')
 
