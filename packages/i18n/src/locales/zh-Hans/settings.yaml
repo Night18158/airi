@@ -640,6 +640,9 @@ pages:
           validation:
             error-missing-api-key: 需要填写 API Key 才能用哦！
         title: ElevenLabs (11labs)
+      aivis-speech:
+        title: AivisSpeech
+        description: 使用 AivisSpeech 引擎的本地日语语音合成。
       kokoro-local:
         description: 基于 Kokoro-82M 的本地语音合成
         fields:

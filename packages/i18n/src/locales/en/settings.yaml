@@ -671,6 +671,9 @@ pages:
           validation:
             error-missing-api-key: Please enter an API key to test the voice.
         title: ElevenLabs
+      aivis-speech:
+        title: AivisSpeech
+        description: Local Japanese TTS using AivisSpeech engine.
       kokoro-local:
         description: Local text-to-speech using Kokoro-82M.
         fields:

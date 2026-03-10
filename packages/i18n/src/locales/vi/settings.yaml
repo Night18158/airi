@@ -640,6 +640,9 @@ pages:
           validation:
             error-missing-api-key: Vui lòng nhập khóa API để thử giọng.
         title: ElevenLabs
+      aivis-speech:
+        title: AivisSpeech
+        description: TTS tiếng Nhật cục bộ sử dụng động cơ AivisSpeech.
       kokoro-local:
         description: Local text-to-speech using Kokoro-82M.
         fields:
