@@ -1,4 +1,4 @@
-import { Buffer } from 'node:buffer'
+import type { Buffer } from 'node:buffer'
 
 import { useLogg } from '@guiiai/logg'
 
@@ -35,11 +35,87 @@ export async function setupVnReaderService(initialPort: number = VN_READER_DEFAU
   let connected = false
   let currentPort = initialPort
   let lastText = ''
+  let pendingText = ''
+  let pendingTimer: ReturnType<typeof setTimeout> | null = null
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null
   let stopped = false
 
   const textHandlers = new Set<(text: string) => void>()
   const connectionHandlers = new Set<(connected: boolean, clientCount: number) => void>()
+
+  /**
+   * Returns true if the text looks like valid game dialogue (contains CJK characters and is not
+   * obviously garbage from unrelated memory threads).
+   *
+   * Textractor sends text from ALL hooked threads simultaneously. Most non-dialogue threads
+   * produce pure ASCII, numbers, or strings with heavily repeated characters from memory dumps.
+   * Keeping only CJK-containing lines eliminates the vast majority of noise.
+   */
+  function isValidGameText(text: string): boolean {
+    if (!text || text.trim().length < 2)
+      return false
+
+    // Must contain CJK characters:
+    //   U+3040–U+309F Hiragana, U+30A0–U+30FF Katakana,
+    //   U+4E00–U+9FFF CJK Unified Ideographs (Chinese/Japanese kanji),
+    //   U+F900–U+FAFF CJK Compatibility Ideographs
+    const cjkPattern = /[\u3040-\u9FFF\uF900-\uFAFF]/
+    if (!cjkPattern.test(text))
+      return false
+
+    // Reject if too many repeated characters (memory garbage indicator)
+    const chars = text.split('')
+    const uniqueChars = new Set(chars).size
+    if (uniqueChars < chars.length * 0.3 && chars.length > 10)
+      return false
+
+    // Reject extremely long lines without Japanese punctuation (likely a memory dump)
+    if (text.length > 500 && !/[。！？「」『』、…]/u.test(text))
+      return false
+
+    return true
+  }
+
+  /**
+   * Schedules text emission with a 300 ms debounce so that when Textractor sends both a partial
+   * and a complete version of the same line, only the longer (more complete) version is emitted.
+   * If the new text is a substring/superset of the already-pending text, the longer one wins.
+   * If the texts are unrelated, the pending text is flushed immediately before queuing the new one.
+   */
+  function emitText(text: string) {
+    // If new text and pending text are substring-related, keep the longer one
+    if (pendingText && (text.includes(pendingText) || pendingText.includes(text))) {
+      if (pendingTimer) {
+        clearTimeout(pendingTimer)
+        pendingTimer = null
+      }
+      pendingText = text.length >= pendingText.length ? text : pendingText
+    }
+    else {
+      // Unrelated text: flush any pending text immediately, then queue the new one
+      if (pendingText && pendingText !== lastText) {
+        lastText = pendingText
+        log.withFields({ text: pendingText }).log('VN text received')
+        for (const handler of textHandlers) handler(pendingText)
+      }
+      if (pendingTimer) {
+        clearTimeout(pendingTimer)
+        pendingTimer = null
+      }
+      pendingText = text
+    }
+
+    // (Re)schedule delayed emission so we catch fuller versions arriving shortly after
+    pendingTimer = setTimeout(() => {
+      if (pendingText && pendingText !== lastText) {
+        lastText = pendingText
+        log.withFields({ text: pendingText }).log('VN text received')
+        for (const handler of textHandlers) handler(pendingText)
+      }
+      pendingText = ''
+      pendingTimer = null
+    }, 300)
+  }
 
   /**
    * Returns true if the message is an AIRI-internal protocol message that should be ignored.
@@ -124,16 +200,12 @@ export async function setupVnReaderService(initialPort: number = VN_READER_DEFAU
         if (!text)
           return
 
-        // Deduplicate identical consecutive messages (Textractor can send duplicates)
-        if (text === lastText)
+        // Filter out lines that are clearly not game dialogue (non-CJK, memory garbage, etc.)
+        if (!isValidGameText(text))
           return
 
-        lastText = text
-        log.withFields({ text }).log('VN text received')
-
-        for (const handler of textHandlers) {
-          handler(text)
-        }
+        // Debounce + deduplication: wait briefly before emitting so we catch fuller versions
+        emitText(text)
       })
 
       socket.on('close', () => {
@@ -170,6 +242,10 @@ export async function setupVnReaderService(initialPort: number = VN_READER_DEFAU
   async function stop() {
     stopped = true
     running = false
+    if (pendingTimer) {
+      clearTimeout(pendingTimer)
+      pendingTimer = null
+    }
     if (reconnectTimer) {
       clearTimeout(reconnectTimer)
       reconnectTimer = null
@@ -180,6 +256,7 @@ export async function setupVnReaderService(initialPort: number = VN_READER_DEFAU
     }
     connected = false
     lastText = ''
+    pendingText = ''
     log.log('VN Reader WebSocket client stopped')
   }
 

@@ -18,9 +18,13 @@ const {
   enabled,
   port,
   targetLanguage,
+  contextLines,
+  nameDictionary,
   currentJapaneseText,
   currentTranslation,
   currentReaction,
+  currentCharacterName,
+  currentDialogue,
   isTranslating,
   history,
 } = storeToRefs(store)
@@ -156,18 +160,55 @@ async function onPortChange(newPort: number) {
         >
       </div>
 
+      <!-- Context lines setting -->
+      <div class="flex items-center gap-3 rounded-lg bg-neutral-800/40 px-3 py-2">
+        <label
+          for="vn-reader-context"
+          class="flex-1 text-sm text-neutral-400"
+        >
+          Líneas de contexto
+        </label>
+        <select
+          id="vn-reader-context"
+          v-model="contextLines"
+          :class="[
+            'rounded-md bg-neutral-700/60 px-2 py-1 text-sm text-neutral-200',
+            'border border-neutral-600/50 outline-none',
+          ]"
+        >
+          <option :value="0">
+            0 (sin contexto)
+          </option>
+          <option :value="2">
+            2 líneas
+          </option>
+          <option :value="3">
+            3 líneas
+          </option>
+          <option :value="5">
+            5 líneas
+          </option>
+        </select>
+      </div>
+
       <!-- Current line panel -->
       <div
         v-if="currentJapaneseText"
         class="flex flex-col gap-3 rounded-xl bg-neutral-800/50 p-4"
       >
-        <!-- Japanese text -->
+        <!-- Japanese text (with optional character name badge) -->
         <div>
           <p class="mb-1 text-xs text-neutral-500 font-medium tracking-wide uppercase">
             日本語
           </p>
+          <!-- Character name badge -->
+          <div v-if="currentCharacterName" class="mb-1 flex items-center gap-2">
+            <span class="rounded-full bg-primary-500/20 px-3 py-0.5 text-xs text-primary-300 font-medium">
+              {{ currentCharacterName }}
+            </span>
+          </div>
           <p class="text-lg text-neutral-200 leading-relaxed">
-            {{ currentJapaneseText }}
+            {{ currentDialogue || currentJapaneseText }}
           </p>
         </div>
 
@@ -231,8 +272,11 @@ async function onPortChange(newPort: number) {
             :key="entry.timestamp"
             class="rounded-lg bg-neutral-800/30 px-3 py-2"
           >
+            <p v-if="entry.characterName" class="mb-0.5 text-xs text-primary-400/80 font-medium">
+              {{ entry.characterName }}
+            </p>
             <p class="text-xs text-neutral-500 leading-relaxed">
-              {{ entry.japanese }}
+              {{ entry.dialogue ?? entry.japanese }}
             </p>
             <p class="text-sm text-neutral-300 leading-relaxed">
               {{ entry.translation }}
@@ -241,6 +285,57 @@ async function onPortChange(newPort: number) {
               ↩ {{ entry.reaction }}
             </p>
           </div>
+        </div>
+      </div>
+
+      <!-- Name dictionary section -->
+      <div class="flex flex-col gap-2 rounded-xl bg-neutral-800/50 p-4">
+        <div class="flex items-center justify-between">
+          <p class="text-sm text-neutral-400 font-medium">
+            Diccionario de nombres
+          </p>
+          <button
+            class="text-xs text-primary-400 transition-colors hover:text-primary-300"
+            @click="store.addDictionaryEntry()"
+          >
+            + Añadir
+          </button>
+        </div>
+
+        <p v-if="nameDictionary.length === 0" class="text-xs text-neutral-600">
+          Sin entradas. Añade nombres propios para que se traduzcan siempre igual.
+        </p>
+
+        <div
+          v-for="(entry, i) in nameDictionary"
+          :key="i"
+          class="flex items-center gap-2"
+        >
+          <input
+            v-model="entry.original"
+            placeholder="薙原"
+            :class="[
+              'flex-1 rounded-md bg-neutral-700/60 px-2 py-1 text-sm text-neutral-200',
+              'border border-neutral-600/50 outline-none',
+              'focus:border-primary-500/60',
+            ]"
+          >
+          <span class="text-neutral-500">→</span>
+          <input
+            v-model="entry.translation"
+            placeholder="Nagihara"
+            :class="[
+              'flex-1 rounded-md bg-neutral-700/60 px-2 py-1 text-sm text-neutral-200',
+              'border border-neutral-600/50 outline-none',
+              'focus:border-primary-500/60',
+            ]"
+          >
+          <button
+            class="text-xs text-red-500/60 transition-colors hover:text-red-400"
+            @click="store.removeDictionaryEntry(i)"
+          >
+            ✕
+          </button>
         </div>
       </div>
 
