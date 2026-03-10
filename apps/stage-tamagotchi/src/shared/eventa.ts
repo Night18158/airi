@@ -212,7 +212,8 @@ export const i18nGetLocale = defineInvokeEventa<Locale>('eventa:invoke:electron:
 // VN Reader events — main → renderer (text/connection) and renderer → main (query)
 export const vnReaderTextReceived = defineEventa<{ text: string }>('eventa:event:vn-reader:text-received')
 export const vnReaderConnectionChanged = defineEventa<{ connected: boolean, clientCount: number }>('eventa:event:vn-reader:connection-changed')
-export const vnReaderGetStatus = defineInvokeEventa<{ running: boolean, clientCount: number }>('eventa:invoke:vn-reader:get-status')
+export const vnReaderGetStatus = defineInvokeEventa<{ running: boolean, clientCount: number, port: number }>('eventa:invoke:vn-reader:get-status')
+export const vnReaderRestartWithPort = defineInvokeEventa<void, { port: number }>('eventa:invoke:vn-reader:restart-with-port')
 
 export { electron } from '@proj-airi/electron-eventa'
 export * from '@proj-airi/electron-eventa/electron-updater'

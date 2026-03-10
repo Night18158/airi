@@ -8,7 +8,7 @@ import { onMounted } from 'vue'
 
 import WindowTitleBar from '../../components/Window/TitleBar.vue'
 
-import { vnReaderConnectionChanged, vnReaderGetStatus, vnReaderTextReceived } from '../../../shared/eventa'
+import { vnReaderConnectionChanged, vnReaderGetStatus, vnReaderRestartWithPort, vnReaderTextReceived } from '../../../shared/eventa'
 import { useVnReaderStore } from '../../stores/vn-reader'
 
 const store = useVnReaderStore()
@@ -16,6 +16,7 @@ const {
   connected,
   clientCount,
   enabled,
+  port,
   targetLanguage,
   currentJapaneseText,
   currentTranslation,
@@ -48,13 +49,32 @@ onMounted(async () => {
   try {
     const getStatus = defineInvoke(context.value, vnReaderGetStatus)
     const status = await getStatus()
-    if (status)
-      store.updateServerStatus(status.running, status.clientCount)
+    if (status) {
+      store.updateServerStatus(status.running, status.clientCount, status.port)
+
+      // If the persisted port differs from the server's current port, restart on the saved port
+      if (port.value !== status.port) {
+        await onPortChange(port.value)
+      }
+    }
   }
   catch (err) {
     console.warn('[VN Reader] Failed to fetch initial server status:', err)
   }
 })
+
+async function onPortChange(newPort: number) {
+  if (Number.isNaN(newPort) || newPort < 1 || newPort > 65535)
+    return
+  try {
+    const restartWithPort = defineInvoke(context.value, vnReaderRestartWithPort)
+    await restartWithPort({ port: newPort })
+    port.value = newPort
+  }
+  catch (err) {
+    console.warn('[VN Reader] Failed to restart server on new port:', err)
+  }
+}
 </script>
 
 <template>
@@ -72,7 +92,7 @@ onMounted(async () => {
           Textractor conectado ({{ clientCount }} {{ clientCount === 1 ? 'cliente' : 'clientes' }})
         </span>
         <span v-else>
-          Esperando Textractor en ws://localhost:9001...
+          Esperando Textractor en ws://localhost:{{ port }}...
         </span>
       </div>
 
@@ -111,6 +131,29 @@ onMounted(async () => {
             EN
           </button>
         </div>
+      </div>
+
+      <!-- Port configuration -->
+      <div class="flex items-center gap-3 rounded-lg bg-neutral-800/40 px-3 py-2">
+        <label
+          for="vn-reader-port"
+          class="flex-1 text-sm text-neutral-400"
+        >
+          Puerto WebSocket
+        </label>
+        <input
+          id="vn-reader-port"
+          :value="port"
+          type="number"
+          min="1"
+          max="65535"
+          :class="[
+            'w-24 rounded-md bg-neutral-700/60 px-2 py-1 text-right text-sm text-neutral-200',
+            'border border-neutral-600/50 outline-none',
+            'focus:border-primary-500/60 focus:ring-1 focus:ring-primary-500/30',
+          ]"
+          @change="onPortChange(Number(($event.target as HTMLInputElement).value))"
+        >
       </div>
 
       <!-- Current line panel -->
@@ -204,7 +247,7 @@ onMounted(async () => {
       <!-- Footer note -->
       <p class="text-center text-xs text-neutral-600 leading-relaxed">
         Configura el plugin WebSocket de Textractor para conectar a
-        <code class="rounded bg-neutral-800 px-1 py-0.5">ws://localhost:9001</code>
+        <code class="rounded bg-neutral-800 px-1 py-0.5">ws://localhost:{{ port }}</code>
       </p>
     </div>
   </div>

@@ -32,6 +32,7 @@ export const useVnReaderStore = defineStore('vn-reader', () => {
   // Settings (persisted)
   const enabled = useLocalStorage<boolean>('vn-reader/enabled', false)
   const targetLanguage = useLocalStorage<'es' | 'en'>('vn-reader/target-language', 'es')
+  const port = useLocalStorage<number>('vn-reader/port', 9001)
 
   // History of recent lines (last 20)
   const history = useLocalStorage<VnReaderHistoryEntry[]>('vn-reader/history', [])
@@ -164,10 +165,12 @@ ${text}`
     clientCount.value = newClientCount
   }
 
-  function updateServerStatus(running: boolean, newClientCount: number) {
+  function updateServerStatus(running: boolean, newClientCount: number, newPort?: number) {
     serverRunning.value = running
     clientCount.value = newClientCount
     connected.value = newClientCount > 0
+    if (newPort !== undefined)
+      port.value = newPort
   }
 
   function clearHistory() {
@@ -190,6 +193,7 @@ ${text}`
     // Settings
     enabled,
     targetLanguage,
+    port,
 
     // History
     history,
