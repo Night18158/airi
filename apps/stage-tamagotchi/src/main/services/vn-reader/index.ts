@@ -89,15 +89,38 @@ export async function setupVnReaderService(initialPort: number = VN_READER_DEFAU
         notifyConnectionChanged()
 
         ws.on('message', (data) => {
-          const text = data.toString('utf-8').trim()
-          if (!text)
+          const raw = data.toString('utf-8').trim()
+          if (!raw)
             return
 
           // Filter out AIRI internal protocol messages (heartbeats, module announcements, etc.)
           // These can appear when the same WebSocket port is shared between Textractor and AIRI internals.
-          if (isAiriInternalMessage(text)) {
+          if (isAiriInternalMessage(raw)) {
             log.log('Ignoring AIRI internal protocol message')
             return
+          }
+
+          // Extract plain text: if the message looks like JSON, try to pull a text field from it.
+          // Otherwise treat the whole message as plain text (Chinese/Japanese game dialogue never
+          // starts with '{', so this path is hit directly for typical Textractor output).
+          let text = raw
+          if (raw.startsWith('{')) {
+            try {
+              const parsed = JSON.parse(raw) as Record<string, unknown>
+              // Some Textractor plugins wrap text in a JSON envelope, e.g. { text: "..." }
+              const candidate = parsed.text ?? parsed.sentence ?? parsed.data
+              if (typeof candidate === 'string' && candidate.trim()) {
+                text = candidate.trim()
+              }
+              else {
+                // Valid JSON but no recognisable text field — skip silently
+                return
+              }
+            }
+            catch {
+              // Not valid JSON — use the raw string as plain text
+              text = raw
+            }
           }
 
           // Deduplicate identical consecutive messages (Textractor can send duplicates)
