@@ -4,30 +4,33 @@ import { useLogg } from '@guiiai/logg'
 
 import { onAppBeforeQuit } from '../../libs/bootkit/lifecycle'
 
-// Port 9001 matches Textractor's WebSocket plugin default — not configurable.
-const VN_READER_PORT = 9001
+// Default port matches Textractor's WebSocket plugin default. Configurable at runtime via restart().
+const VN_READER_DEFAULT_PORT = 9001
 
 export interface VnReaderService {
   start: () => Promise<void>
   stop: () => Promise<void>
-  getStatus: () => { running: boolean, clientCount: number }
+  restart: (port: number) => Promise<void>
+  getStatus: () => { running: boolean, clientCount: number, port: number }
   onTextReceived: (handler: (text: string) => void) => () => void
   onConnectionChanged: (handler: (connected: boolean, clientCount: number) => void) => () => void
 }
 
 /**
  * Sets up the VN Reader WebSocket server service.
- * Creates a WebSocket server on port 9001 (Textractor's default) that accepts connections
- * from Textractor's WebSocket plugin and forwards extracted Japanese text to the renderer
+ * Creates a WebSocket server on the given port (defaults to 9001, Textractor's default) that accepts
+ * connections from Textractor's WebSocket plugin and forwards extracted Japanese text to the renderer
  * via registered handlers. Handles deduplication of consecutive identical messages.
+ * The port can be changed at runtime by calling restart(newPort).
  */
-export async function setupVnReaderService(): Promise<VnReaderService> {
+export async function setupVnReaderService(initialPort: number = VN_READER_DEFAULT_PORT): Promise<VnReaderService> {
   const log = useLogg('main/vn-reader').useGlobalConfig()
 
   let server: ReturnType<typeof createServer> | null = null
   let running = false
   let clientCount = 0
   let lastText = ''
+  let currentPort = initialPort
 
   const textHandlers = new Set<(text: string) => void>()
   const connectionHandlers = new Set<(connected: boolean, clientCount: number) => void>()
@@ -91,19 +94,19 @@ export async function setupVnReaderService(): Promise<VnReaderService> {
 
       await new Promise<void>((resolve, reject) => {
         httpServer.once('error', reject)
-        httpServer.listen(VN_READER_PORT, '127.0.0.1', () => {
+        httpServer.listen(currentPort, '127.0.0.1', () => {
           httpServer.removeListener('error', reject)
           resolve()
         })
       })
 
       running = true
-      log.log(`VN Reader WebSocket server listening on ws://127.0.0.1:${VN_READER_PORT}`)
+      log.log(`VN Reader WebSocket server listening on ws://127.0.0.1:${currentPort}`)
     }
     catch (error) {
       const nodeError = error as NodeJS.ErrnoException
       if (nodeError.code === 'EADDRINUSE') {
-        log.withError(error).warn(`Port ${VN_READER_PORT} already in use — VN Reader server not started`)
+        log.withError(error).warn(`Port ${currentPort} already in use — VN Reader server not started`)
       }
       else {
         log.withError(error).error('Failed to start VN Reader WebSocket server')
@@ -127,7 +130,7 @@ export async function setupVnReaderService(): Promise<VnReaderService> {
   }
 
   function getStatus() {
-    return { running, clientCount }
+    return { running, clientCount, port: currentPort }
   }
 
   function onTextReceived(handler: (text: string) => void) {
@@ -140,6 +143,18 @@ export async function setupVnReaderService(): Promise<VnReaderService> {
     return () => connectionHandlers.delete(handler)
   }
 
+  /**
+   * Stops the current server and restarts it on the given port.
+   * No-op if the server is already running on the requested port.
+   */
+  async function restart(port: number) {
+    if (running && currentPort === port)
+      return
+    await stop()
+    currentPort = port
+    await start()
+  }
+
   onAppBeforeQuit(async () => {
     await stop()
   })
@@ -149,6 +164,7 @@ export async function setupVnReaderService(): Promise<VnReaderService> {
   return {
     start,
     stop,
+    restart,
     getStatus,
     onTextReceived,
     onConnectionChanged,

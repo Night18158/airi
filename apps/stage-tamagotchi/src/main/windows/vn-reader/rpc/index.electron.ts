@@ -8,7 +8,7 @@ import { defineInvokeHandler } from '@moeru/eventa'
 import { createContext } from '@moeru/eventa/adapters/electron/main'
 import { ipcMain } from 'electron'
 
-import { electronOpenMainDevtools, vnReaderConnectionChanged, vnReaderGetStatus, vnReaderTextReceived } from '../../../../shared/eventa'
+import { electronOpenMainDevtools, vnReaderConnectionChanged, vnReaderGetStatus, vnReaderRestartWithPort, vnReaderTextReceived } from '../../../../shared/eventa'
 import { setupBaseWindowElectronInvokes } from '../../shared/window'
 
 export async function setupVnReaderWindowElectronInvokes(params: {
@@ -28,8 +28,9 @@ export async function setupVnReaderWindowElectronInvokes(params: {
 
   defineInvokeHandler(context, electronOpenMainDevtools, () => params.window.webContents.openDevTools({ mode: 'detach' }))
 
-  // VN Reader IPC — let renderer query status and receive pushed events
+  // VN Reader IPC — let renderer query status, receive pushed events, and change port
   defineInvokeHandler(context, vnReaderGetStatus, () => params.vnReaderService.getStatus())
+  defineInvokeHandler(context, vnReaderRestartWithPort, payload => params.vnReaderService.restart(payload.port))
 
   const unsubText = params.vnReaderService.onTextReceived((text) => {
     context.emit(vnReaderTextReceived, { text })
