@@ -11,9 +11,16 @@ import { ref } from 'vue'
 
 export interface VnReaderHistoryEntry {
   japanese: string
+  characterName?: string
+  dialogue?: string
   translation: string
   reaction?: string
   timestamp: number
+}
+
+export interface NameDictionaryEntry {
+  original: string
+  translation: string
 }
 
 export const useVnReaderStore = defineStore('vn-reader', () => {
@@ -26,6 +33,8 @@ export const useVnReaderStore = defineStore('vn-reader', () => {
   const currentJapaneseText = ref('')
   const currentTranslation = ref('')
   const currentReaction = ref('')
+  const currentCharacterName = ref('')
+  const currentDialogue = ref('')
   const isTranslating = ref(false)
   const isSpeaking = ref(false)
 
@@ -33,6 +42,8 @@ export const useVnReaderStore = defineStore('vn-reader', () => {
   const enabled = useLocalStorage<boolean>('vn-reader/enabled', false)
   const targetLanguage = useLocalStorage<'es' | 'en'>('vn-reader/target-language', 'es')
   const port = useLocalStorage<number>('vn-reader/port', 9001)
+  const contextLines = useLocalStorage<number>('vn-reader/context-lines', 3)
+  const nameDictionary = useLocalStorage<NameDictionaryEntry[]>('vn-reader/name-dictionary', [])
 
   // History of recent lines (last 20)
   const history = useLocalStorage<VnReaderHistoryEntry[]>('vn-reader/history', [])
@@ -43,15 +54,78 @@ export const useVnReaderStore = defineStore('vn-reader', () => {
   const speechRuntimeStore = useSpeechRuntimeStore()
 
   /**
+   * Parses a VN text line into a character name and the dialogue body.
+   * Supports the common Japanese formats:
+   *   - `キャラ名「dialogue」` / `キャラ名『dialogue』` (full-width bracket pairs)
+   *   - `キャラ名：dialogue` / `キャラ名:dialogue`
+   * Returns empty characterName when no recognised pattern is found.
+   */
+  function parseCharacterAndDialogue(text: string): { characterName: string, dialogue: string } {
+    // Pattern: Name「dialogue」or Name『dialogue』(full-width bracket pairs)
+    const bracketMatch = text.match(/^([^「『\s]{1,20})[「『](.+)[」』]$/su)
+    if (bracketMatch) {
+      return { characterName: bracketMatch[1].trim(), dialogue: bracketMatch[2].trim() }
+    }
+
+    // Pattern: Name：dialogue or Name:dialogue (full-width or half-width colon)
+    const colonMatch = text.match(/^([^：:\s]{1,20})[：:](.+)$/su)
+    if (colonMatch) {
+      return { characterName: colonMatch[1].trim(), dialogue: colonMatch[2].trim() }
+    }
+
+    return { characterName: '', dialogue: text }
+  }
+
+  /**
+   * Returns a TTS playback rate scaled to the length of the translated text.
+   * Longer lines are read slightly faster to maintain pacing alongside the game.
+   */
+  function getReadingRate(text: string): number {
+    const len = text.length
+    if (len < 20)
+      return 1.0
+    if (len < 60)
+      return 1.1
+    if (len < 120)
+      return 1.2
+    return 1.3
+  }
+
+  /**
    * Builds the translation prompt injected into the LLM for each VN line.
    * Instructs the model to translate from Japanese to the selected target language,
    * preserving tone, transliterating names, and occasionally adding AIRI's personality reaction.
+   * Includes recent dialogue context and a name dictionary when configured.
    */
-  function buildTranslationPrompt(text: string): string {
+  function buildTranslationPrompt(text: string, characterName?: string): string {
     const langLabel = targetLanguage.value === 'es' ? 'Spanish (Spain, es-ES)' : 'English'
+
+    // Build name/term dictionary block
+    let dictionaryBlock = ''
+    if (nameDictionary.value.length > 0) {
+      const entries = nameDictionary.value
+        .map(e => `  "${e.original}" → "${e.translation}"`)
+        .join('\n')
+      dictionaryBlock = `\nName/term dictionary (ALWAYS use these translations):\n${entries}\n`
+    }
+
+    // Build recent dialogue context block (most recent entries first in storage, reverse for prompt)
+    let contextBlock = ''
+    const recentCount = contextLines.value
+    if (recentCount > 0 && history.value.length > 0) {
+      const contextItems = history.value
+        .slice(0, recentCount)
+        .reverse()
+        .map(entry => `  [${entry.characterName || 'narrator'}]: ${entry.dialogue ?? entry.japanese} → ${entry.translation}`)
+        .join('\n')
+      contextBlock = `\nRecent dialogue context (for reference only, do NOT retranslate):\n${contextItems}\n`
+    }
+
+    const characterHint = characterName ? `\nCurrent speaker: ${characterName}` : ''
+
     return `You are translating a Japanese visual novel for a reader.
 Translate the following Japanese text to ${langLabel}.
-
+${dictionaryBlock}
 Rules:
 - Translate dialogue naturally preserving the speaker's tone and personality
 - Transliterate Japanese proper names (don't translate them)
@@ -59,11 +133,12 @@ Rules:
 - Narration should flow naturally in the target language
 - Occasionally (not every line, roughly 1 in 5) add a short personal reaction as AIRI — you are a curious digital entity reading this story alongside the user, you have opinions and feelings about what's happening
 - NEVER add a reaction to every line — it becomes annoying
+${contextBlock}${characterHint}
 
 Respond ONLY with valid JSON in this exact format:
 {"translation": "<translated text>", "reaction": "<optional very short reaction, omit key if no reaction>"}
 
-Japanese text to translate:
+Text to translate:
 ${text}`
   }
 
@@ -72,7 +147,7 @@ ${text}`
    * The LLM responds in a strict JSON format with "translation" and optional "reaction" keys.
    * Falls back to returning the original text if the provider is not configured or the call fails.
    */
-  async function translate(text: string): Promise<{ translation: string, reaction?: string }> {
+  async function translate(text: string, characterName?: string): Promise<{ translation: string, reaction?: string }> {
     const provider = activeProvider.value
     const model = activeModel.value
 
@@ -87,7 +162,7 @@ ${text}`
       const { text: responseText } = await generateText({
         ...chatConfig,
         messages: message.messages(
-          message.user(buildTranslationPrompt(text)),
+          message.user(buildTranslationPrompt(text, characterName)),
         ),
       })
 
@@ -110,8 +185,13 @@ ${text}`
   /**
    * Sends translated text through the shared speech runtime pipeline for TTS playback.
    * Uses 'queue' behavior so VN lines are read in order even if they arrive quickly.
+   * The adaptive rate is computed but the current speech pipeline API does not yet accept
+   * a rate parameter — kept for future use when the pipeline exposes playback rate control.
+   * TODO: Pass `rate` to `openIntent` once IntentOptions supports it.
    */
   async function speakText(text: string) {
+    // Compute the adaptive rate (reserved for future use when the API supports it)
+    const _rate = getReadingRate(text)
     isSpeaking.value = true
     try {
       const intent = speechRuntimeStore.openIntent({
@@ -131,13 +211,16 @@ ${text}`
     if (!enabled.value)
       return
 
+    const { characterName, dialogue } = parseCharacterAndDialogue(text)
     currentJapaneseText.value = text
+    currentCharacterName.value = characterName
+    currentDialogue.value = dialogue
     currentTranslation.value = ''
     currentReaction.value = ''
     isTranslating.value = true
 
     try {
-      const { translation, reaction } = await translate(text)
+      const { translation, reaction } = await translate(text, characterName || undefined)
 
       currentTranslation.value = translation
       currentReaction.value = reaction ?? ''
@@ -145,6 +228,9 @@ ${text}`
       // Add to history (keep last 20)
       const entry: VnReaderHistoryEntry = {
         japanese: text,
+        characterName: characterName || undefined,
+        // Only store the separated dialogue when a character name was successfully parsed
+        dialogue: characterName ? dialogue : undefined,
         translation,
         reaction,
         timestamp: Date.now(),
@@ -177,6 +263,14 @@ ${text}`
     history.value = []
   }
 
+  function addDictionaryEntry() {
+    nameDictionary.value = [...nameDictionary.value, { original: '', translation: '' }]
+  }
+
+  function removeDictionaryEntry(index: number) {
+    nameDictionary.value = nameDictionary.value.filter((_, i) => i !== index)
+  }
+
   return {
     // Connection state
     connected,
@@ -187,6 +281,8 @@ ${text}`
     currentJapaneseText,
     currentTranslation,
     currentReaction,
+    currentCharacterName,
+    currentDialogue,
     isTranslating,
     isSpeaking,
 
@@ -194,6 +290,8 @@ ${text}`
     enabled,
     targetLanguage,
     port,
+    contextLines,
+    nameDictionary,
 
     // History
     history,
@@ -203,5 +301,7 @@ ${text}`
     updateConnection,
     updateServerStatus,
     clearHistory,
+    addDictionaryEntry,
+    removeDictionaryEntry,
   }
 })
