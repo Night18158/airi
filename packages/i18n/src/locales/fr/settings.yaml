@@ -640,6 +640,9 @@ pages:
           validation:
             error-missing-api-key: Veuillez entrer une clé API pour tester la voix.
         title: ElevenLabs
+      aivis-speech:
+        title: AivisSpeech
+        description: Synthèse vocale japonaise locale avec le moteur AivisSpeech.
       kokoro-local:
         description: Local text-to-speech using Kokoro-82M.
         fields:

@@ -77,21 +77,6 @@ export const useVnReaderStore = defineStore('vn-reader', () => {
   }
 
   /**
-   * Returns a TTS playback rate scaled to the length of the translated text.
-   * Longer lines are read slightly faster to maintain pacing alongside the game.
-   */
-  function getReadingRate(text: string): number {
-    const len = text.length
-    if (len < 20)
-      return 1.0
-    if (len < 60)
-      return 1.1
-    if (len < 120)
-      return 1.2
-    return 1.3
-  }
-
-  /**
    * Builds the translation prompt injected into the LLM for each VN line.
    * Instructs the model to translate from Japanese to the selected target language,
    * preserving tone, transliterating names, and occasionally adding AIRI's personality reaction.
@@ -185,13 +170,8 @@ ${text}`
   /**
    * Sends translated text through the shared speech runtime pipeline for TTS playback.
    * Uses 'queue' behavior so VN lines are read in order even if they arrive quickly.
-   * The adaptive rate is computed but the current speech pipeline API does not yet accept
-   * a rate parameter — kept for future use when the pipeline exposes playback rate control.
-   * TODO: Pass `rate` to `openIntent` once IntentOptions supports it.
    */
   async function speakText(text: string) {
-    // Compute the adaptive rate (reserved for future use when the API supports it)
-    const _rate = getReadingRate(text)
     isSpeaking.value = true
     try {
       const intent = speechRuntimeStore.openIntent({

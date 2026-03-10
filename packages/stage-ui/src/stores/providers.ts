@@ -1488,6 +1488,123 @@ export const useProvidersStore = defineStore('providers', () => {
         },
       },
     },
+    'aivis-speech': {
+      id: 'aivis-speech',
+      category: 'speech',
+      tasks: ['text-to-speech'],
+      nameKey: 'settings.pages.providers.provider.aivis-speech.title',
+      name: 'AivisSpeech',
+      descriptionKey: 'settings.pages.providers.provider.aivis-speech.description',
+      description: 'aivis-project.com',
+      icon: 'i-lobe-icons:speaker',
+      defaultOptions: () => ({
+        baseUrl: 'http://localhost:10101',
+      }),
+      createProvider: async (config) => {
+        const baseUrl = ((config.baseUrl as string) || 'http://localhost:10101').replace(/\/$/, '')
+        const provider: SpeechProvider = {
+          speech: () => ({
+            baseURL: `${baseUrl}/`,
+            model: 'aivis-speech',
+            fetch: async (_input: RequestInfo | URL, init?: RequestInit) => {
+              if (!init?.body || typeof init.body !== 'string')
+                throw new Error('Invalid request body')
+
+              const body = JSON.parse(init.body) as { input: string, voice: string }
+              const text = body.input
+              const speakerId = body.voice || '888753760'
+
+              // Step 1: audio_query
+              const queryRes = await fetch(
+                `${baseUrl}/audio_query?speaker=${encodeURIComponent(speakerId)}&text=${encodeURIComponent(text)}`,
+                { method: 'POST' },
+              )
+              if (!queryRes.ok)
+                throw new Error(`AivisSpeech audio_query failed: ${queryRes.statusText}`)
+              const queryJson = await queryRes.json()
+
+              // Step 2: synthesis
+              const synthRes = await fetch(
+                `${baseUrl}/synthesis?speaker=${encodeURIComponent(speakerId)}`,
+                {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify(queryJson),
+                },
+              )
+              if (!synthRes.ok)
+                throw new Error(`AivisSpeech synthesis failed: ${synthRes.statusText}`)
+
+              const buffer = await synthRes.arrayBuffer()
+              return new Response(buffer, {
+                status: 200,
+                headers: { 'Content-Type': 'audio/wav' },
+              })
+            },
+          }),
+        }
+        return provider
+      },
+      capabilities: {
+        listVoices: async (config) => {
+          const baseUrl = ((config.baseUrl as string) || 'http://localhost:10101').replace(/\/$/, '')
+          const response = await fetch(`${baseUrl}/speakers`)
+          if (!response.ok)
+            throw new Error(`Failed to fetch AivisSpeech speakers: ${response.statusText}`)
+
+          const speakers = await response.json() as Array<{
+            name: string
+            speaker_uuid: string
+            styles: Array<{ id: number, name: string, type: string }>
+          }>
+
+          return speakers.flatMap(speaker =>
+            speaker.styles
+              .filter(style => style.type === 'talk')
+              .map(style => ({
+                id: String(style.id),
+                name: `${speaker.name}（${style.name}）`,
+                provider: 'aivis-speech',
+                languages: [{ code: 'ja', title: 'Japanese' }],
+              })),
+          )
+        },
+        listModels: async () => [
+          {
+            id: 'aivis-speech',
+            name: 'AivisSpeech',
+            provider: 'aivis-speech',
+            description: 'AivisSpeech local TTS engine',
+            contextLength: 0,
+            deprecated: false,
+          },
+        ],
+      },
+      validators: {
+        validateProviderConfig: async (config) => {
+          const baseUrl = ((config.baseUrl as string) || 'http://localhost:10101').replace(/\/$/, '')
+          const errors: Error[] = []
+
+          try {
+            const controller = new AbortController()
+            const timeout = setTimeout(() => controller.abort(), 3000)
+            const response = await fetch(`${baseUrl}/version`, { signal: controller.signal })
+            clearTimeout(timeout)
+
+            if (!response.ok) {
+              const reason = `AivisSpeech unreachable: HTTP ${response.status} ${response.statusText}`
+              return { errors: [new Error(reason)], reason, valid: false }
+            }
+          }
+          catch (err) {
+            const reason = `AivisSpeech connection failed. Make sure AivisSpeech is running on ${baseUrl}`
+            return { errors: [err as Error], reason, valid: false }
+          }
+
+          return { errors, reason: '', valid: errors.length === 0 }
+        },
+      },
+    },
     'kokoro-local': {
       id: 'kokoro-local',
       category: 'speech',
