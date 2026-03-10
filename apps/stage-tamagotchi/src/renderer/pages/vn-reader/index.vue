@@ -92,7 +92,7 @@ async function onPortChange(newPort: number) {
           Textractor conectado ({{ clientCount }} {{ clientCount === 1 ? 'cliente' : 'clientes' }})
         </span>
         <span v-else>
-          Esperando Textractor en ws://localhost:{{ port }}...
+          Conectando a Textractor en ws://localhost:{{ port }}...
         </span>
       </div>
 
@@ -246,8 +246,7 @@ async function onPortChange(newPort: number) {
 
       <!-- Footer note -->
       <p class="text-center text-xs text-neutral-600 leading-relaxed">
-        Configura el plugin WebSocket de Textractor para conectar a
-        <code class="rounded bg-neutral-800 px-1 py-0.5">ws://localhost:{{ port }}</code>
+        Asegúrate de que el plugin <code class="rounded bg-neutral-800 px-1 py-0.5">textractor_websocket_x86</code> está activo en Textractor
       </p>
     </div>
   </div>
